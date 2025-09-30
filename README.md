@@ -34,21 +34,6 @@ python3 user_interface.py
 python3 user_interface.py matchmaking
 ```
 
-## 📚 Documentation
-
-**📖 [MSK Chess Setup Guide](MSK_CHESS_SETUP.md)** - Complete setup and configuration guide
-
-**🚀 [GitHub Actions Setup Guide](GITHUB_SETUP.md)** - 24/7 free hosting (may need adaptation for MSK Chess)
-
-## ⚙️ Configuration
-
-The bot is pre-configured in `config.yml` with:
-- ✅ MSK Chess token: `mEDe1IjWUIktMSrp`
-- ✅ Base URL: `https://mskchess.ru`
-- ✅ Stockfish engine with optimized settings
-- ✅ Opening books for various time controls
-- ✅ Challenge acceptance criteria
-
 ## 🎮 Features
 
 - ♟️ Plays standard chess and variants
@@ -87,7 +72,6 @@ Once running, use these commands:
 - Verify execute permissions
 - Test manually: `./engines/stockfish`
 
-See [MSK_CHESS_SETUP.md](MSK_CHESS_SETUP.md) for detailed troubleshooting.
 
 ## 📄 Credits
 
