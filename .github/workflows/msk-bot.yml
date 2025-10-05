@@ -43,6 +43,24 @@ jobs:
           pip install -r requirements.txt
           pip install tenacity pyyaml
 
+      - name: Prepare Engine Permissions
+        run: |
+          echo "Setting execute permissions for engines..."
+          if [ -f engines/stockfish ]; then
+            chmod +x engines/stockfish
+            echo "✅ Stockfish permissions set"
+          else
+            echo "ERROR: engines/stockfish not found!"
+            exit 1
+          fi
+          if [ -f engines/fsf-latest ]; then
+            chmod +x engines/fsf-latest
+            echo "✅ Fairy-Stockfish permissions set"
+          else
+            echo "Warning: engines/fsf-latest not found, proceeding..."
+          fi
+          ls -l engines/  # Debug: List engine directory contents
+
       - name: Debug MSK_TOKEN
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
@@ -62,7 +80,6 @@ jobs:
             echo "ERROR: MSK_TOKEN secret is missing or empty!"
             exit 1
           fi
-          # Sanitize token by removing newlines and carriage returns
           SANITIZED_TOKEN=$(echo "$MSK_TOKEN" | tr -d '\n\r')
           printf 'token: "%s"\n# MSK Chess OAuth2 Token\n' "$SANITIZED_TOKEN" > config.yml
           echo "✅ Token injected successfully"
@@ -83,24 +100,4 @@ jobs:
             fi
           else
             echo "✅ config.yml format verified (strict)"
-          fi
-
-      - name: Launch Bot
-        run: |
-          CMD_BASE="python3 -u user_interface.py"
-          MODE="${{ github.event.inputs.mode }}"
-          if [[ "$MODE" == "matchmaking" ]]; then
-            echo "🤖 Running matchmaking mode."
-            eval "$CMD_BASE matchmaking"
-          elif [[ "$MODE" == "tournament" ]]; then
-            TOUR_ID="${{ github.event.inputs.tournament_id }}"
-            if [[ -z "$TOUR_ID" ]]; then
-              echo "⚠️ Tournament ID missing. Skipping."
-            else
-              echo "🤖 Joining tournament: $TOUR_ID"
-              eval "$CMD_BASE \"tournament $TOUR_ID\""
-            fi
-          else
-            echo "🤖 Running normal mode."
-            eval "$CMD_BASE"
           fi
