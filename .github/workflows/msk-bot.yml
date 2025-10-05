@@ -54,4 +54,4 @@ jobs:
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
-          python -u user_interface.py 
+          python -u user_interface.py --upgrade
