@@ -1,4 +1,4 @@
-name: MSK Bot Runner v2  # Updated name to distinguish from old runs
+name: MSK Bot Runner
 concurrency:
   group: msk-bot-runner
   cancel-in-progress: true
@@ -13,8 +13,20 @@ on:
           - normal
           - matchmaking
           - tournament
+      tournament_id:
+        description: 'Tournament ID (if tournament mode)'
+        type: string
+        required: false
+      team_id:
+        description: 'Team ID (optional)'
+        type: string
+        required: false
+      password:
+        description: 'Tournament password (optional)'
+        type: string
+        required: false
   schedule:
-    - cron: '0 */6 * * *' # Run every 6 hours
+    - cron: '0 */6 * * *' # Every 6 hours
   push:
     branches: [ main ]
     paths:
@@ -81,8 +93,13 @@ jobs:
             exit 1
           fi
           SANITIZED_TOKEN=$(echo "$MSK_TOKEN" | tr -d '\n\r')
-          printf 'token: "%s"\n# MSK Chess OAuth2 Token\n' "$SANITIZED_TOKEN" > config.yml
-          echo "✅ Token injected successfully"
+          cat << EOF > config.yml
+token: "$SANITIZED_TOKEN"
+# MSK Chess OAuth2 Token
+engines:
+  path: "./engines/stockfish"
+EOF
+          echo "✅ Token and engine config injected successfully"
 
       - name: Verify config.yml
         run: |
@@ -91,7 +108,7 @@ jobs:
           echo "Debug: Sanitized contents of config.yml (excluding token):"
           grep -v '^token:' config.yml || echo "No non-token fields found in config.yml"
           if ! grep -q '^token: \".*\"$' config.yml; then
-            echo "Warning: config.yml does not match strict format 'token: \"...\"'"
+            echo "Warning: config.yml does not match strict token format 'token: \"...\"'"
             if grep -q '^token: .*' config.yml; then
               echo "✅ config.yml contains a token field, proceeding..."
             else
@@ -99,26 +116,43 @@ jobs:
               exit 1
             fi
           else
-            echo "✅ config.yml format verified (strict)"
+            echo "✅ config.yml token format verified (strict)"
           fi
+          if ! grep -q '^engines:' config.yml; then
+            echo "ERROR: config.yml does not contain 'engines' section!"
+            exit 1
+          fi
+          echo "✅ config.yml engines section verified"
 
       - name: Launch Bot
         run: |
           echo "🤖 Starting bot..."
           CMD_BASE="python3 -u user_interface.py"
           MODE="${{ github.event.inputs.mode }}"
+          TOUR_ID="${{ github.event.inputs.tournament_id }}"
+          TEAM_ID="${{ github.event.inputs.team_id }}"
+          PASSWORD="${{ github.event.inputs.password }}"
           if [[ "$MODE" == "matchmaking" ]]; then
             echo "🤖 Running matchmaking mode."
             eval "$CMD_BASE matchmaking"
           elif [[ "$MODE" == "tournament" ]]; then
-            TOUR_ID="${{ github.event.inputs.tournament_id }}"
             if [[ -z "$TOUR_ID" ]]; then
               echo "⚠️ Tournament ID missing. Skipping."
             else
-              echo "🤖 Joining tournament: $TOUR_ID"
-              eval "$CMD_BASE \"tournament $TOUR_ID\""
+              ARGS="$TOUR_ID"
+              [[ -n "$TEAM_ID" ]] && ARGS="$ARGS $TEAM_ID"
+              [[ -n "$PASSWORD" ]] && ARGS="$ARGS $PASSWORD"
+              echo "🤖 Joining tournament: $ARGS"
+              eval "$CMD_BASE \"tournament $ARGS\""
             fi
           else
             echo "🤖 Running normal mode."
             eval "$CMD_BASE"
           fi
+
+      - name: Auto-Restart After Timeout
+        run: |
+          BOT_PID=$!
+          ( sleep 20700 && echo "⏰ Time's up. Restarting bot..." && kill -SIGTERM $BOT_PID ) &
+          wait $BOT_PID
+          echo "Bot ended cleanly."
