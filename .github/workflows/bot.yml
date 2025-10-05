@@ -13,18 +13,6 @@ on:
           - normal
           - matchmaking
           - tournament
-      tournament_id:
-        description: 'Tournament ID (if applicable)'
-        type: string
-        required: false
-      team_id:
-        description: 'Team ID (optional)'
-        type: string
-        required: false
-      password:
-        description: 'Tournament password (optional)'
-        type: string
-        required: false
   schedule:
     - cron: '0 */6 * * *' # Run every 6 hours
   push:
@@ -38,7 +26,7 @@ permissions:
 jobs:
   bot-runner:
     runs-on: ubuntu-latest
-    timeout-minutes: 355 # Restart just before GitHub limit
+    timeout-minutes: 355
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
@@ -55,43 +43,12 @@ jobs:
           pip install -r requirements.txt
           pip install tenacity pyyaml
 
-      - name: Prepare Engine Directory
-        run: |
-          echo "Initializing engine storage..."
-          mkdir -p engines
-          sudo apt-get update && sudo apt-get install -y unzip curl
-
-      - name: Fetch Latest Stockfish
-        run: |
-          chmod +x engines/stockfish || echo "Stockfish not found, proceeding..."
-
-      - name: Acquire Fairy-Stockfish
-        run: |
-          echo "Obtaining the latest Fairy-Stockfish..."
-          RUN_ID=$(curl -s -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/fairy-stockfish/Fairy-Stockfish/actions/workflows/release.yml/runs?per_page=1&branch=master&status=success" \
-            | jq -r '.workflow_runs[0].id')
-          ARTIFACT_URL=$(curl -s -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/fairy-stockfish/Fairy-Stockfish/actions/runs/$RUN_ID/artifacts" \
-            | jq -r '.artifacts[] | select(.name | contains("linux-x86-64-modern")) | .archive_download_url')
-          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o fsf.zip "$ARTIFACT_URL"
-          unzip -o fsf.zip -d engines/
-          if [ -f engines/fairy-stockfish_x86-64-modern ]; then
-            mv engines/fairy-stockfish_x86-64-modern engines/fsf-latest
-          else
-            echo "Fairy-Stockfish binary not found!"
-            exit 1
-          fi
-          chmod +x engines/fsf-latest
-
       - name: Debug MSK_TOKEN
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
           if [ -z "$MSK_TOKEN" ]; then
-            echo "ERROR: MSK_TOKEN secret is missing!"
+            echo "ERROR: MSK_TOKEN secret is missing or empty!"
             exit 1
           fi
           echo "Debug: MSK_TOKEN length is ${#MSK_TOKEN}"
@@ -102,53 +59,48 @@ jobs:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
           if [ -z "$MSK_TOKEN" ]; then
-            echo "ERROR: MSK_TOKEN secret is missing!"
+            echo "ERROR: MSK_TOKEN secret is missing or empty!"
             exit 1
           fi
-          # Write token to config.yml, preserving quotes as in your example
-          printf 'token: "%s"\n' "$MSK_TOKEN" > config.yml
+          # Sanitize token by removing newlines and carriage returns
+          SANITIZED_TOKEN=$(echo "$MSK_TOKEN" | tr -d '\n\r')
+          printf 'token: "%s"\n# MSK Chess OAuth2 Token\n' "$SANITIZED_TOKEN" > config.yml
           echo "✅ Token injected successfully"
 
       - name: Verify config.yml
         run: |
-          echo "Debug: Contents of config.yml (sanitized):"
-          cat config.yml | grep -v token || echo "No token field found in config.yml"
-          if ! grep -q '^token: ".*"$' config.yml; then
-            echo "ERROR: config.yml does not match expected format 'token: \"...\"'"
-            exit 1
+          echo "Debug: Raw contents of config.yml:"
+          cat config.yml || echo "ERROR: config.yml is empty or missing!"
+          echo "Debug: Sanitized contents of config.yml (excluding token):"
+          grep -v '^token:' config.yml || echo "No non-token fields found in config.yml"
+          if ! grep -q '^token: \".*\"$' config.yml; then
+            echo "Warning: config.yml does not match strict format 'token: \"...\"'"
+            if grep -q '^token: .*' config.yml; then
+              echo "✅ config.yml contains a token field, proceeding..."
+            else
+              echo "ERROR: config.yml does not contain a valid token field!"
+              exit 1
+            fi
+          else
+            echo "✅ config.yml format verified (strict)"
           fi
-          echo "✅ config.yml format verified"
 
       - name: Launch Bot
         run: |
           CMD_BASE="python3 -u user_interface.py"
           MODE="${{ github.event.inputs.mode }}"
-          TOUR_ID="${{ github.event.inputs.tournament_id }}"
-          TEAM_ID="${{ github.event.inputs.team_id }}"
-          PASSWORD="${{ github.event.inputs.password }}"
-
           if [[ "$MODE" == "matchmaking" ]]; then
-            CMD="$CMD_BASE matchmaking"
-            echo "🤖 Running command: $CMD"
-            eval "$CMD"
+            echo "🤖 Running matchmaking mode."
+            eval "$CMD_BASE matchmaking"
           elif [[ "$MODE" == "tournament" ]]; then
+            TOUR_ID="${{ github.event.inputs.tournament_id }}"
             if [[ -z "$TOUR_ID" ]]; then
               echo "⚠️ Tournament ID missing. Skipping."
             else
-              ARGS="$TOUR_ID"
-              [[ -n "$TEAM_ID" ]] && ARGS="$ARGS $TEAM_ID"
-              [[ -n "$PASSWORD" ]] && ARGS="$ARGS $PASSWORD"
-              echo "🤖 Joining tournament: $ARGS"
-              eval "$CMD_BASE \"tournament $ARGS\""
+              echo "🤖 Joining tournament: $TOUR_ID"
+              eval "$CMD_BASE \"tournament $TOUR_ID\""
             fi
           else
             echo "🤖 Running normal mode."
             eval "$CMD_BASE"
           fi
-
-      - name: Auto-Restart After Timeout
-        run: |
-          BOT_PID=$!
-          ( sleep 20700 && echo "⏰ Time's up. Restarting bot..." && kill -SIGTERM $BOT_PID ) &
-          wait $BOT_PID
-          echo "Bot ended cleanly."
