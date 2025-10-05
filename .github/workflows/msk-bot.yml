@@ -29,17 +29,24 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      # Safely insert MSK token even if token line is empty or missing
       - name: Insert MSK token into config
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
-          sed -i "s/^token:.*/token: \"${MSK_TOKEN}\"/" config.yml
+          if grep -q '^token:' config.yml; then
+            sed -i "s|^token:.*|token: \"${MSK_TOKEN}\"|" config.yml
+          else
+            echo "token: \"${MSK_TOKEN}\"" | cat - config.yml > temp && mv temp config.yml
+          fi
 
+      # Make both Stockfish and Fairy-Stockfish executable
       - name: Make engines executable
         run: |
           chmod +x engines/stockfish || true
-          chmod +x engines/fsf || true
+          chmod +x engines/fairy-stockfish || true
 
+      # Run the MSKChess bot
       - name: Run MSKChess Bot
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
