@@ -1,4 +1,4 @@
-token: "xxxxxxxxxxxxxxxx"         # MSK Chess OAuth2 Token.
+token: 
 
 engines:
   standard:                               # Engine used for standard chess and when no suitable special engine is configured.
