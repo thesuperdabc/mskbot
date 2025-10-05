@@ -29,24 +29,23 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # Safely insert MSK token even if token line is empty or missing
+      # Safely insert MSK token (no sed errors, even if token has symbols)
       - name: Insert MSK token into config
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
+          TOKEN_ESCAPED=$(printf '%s\n' "$MSK_TOKEN" | sed 's/["\\]/\\&/g')
           if grep -q '^token:' config.yml; then
-            sed -i "s|^token:.*|token: \"${MSK_TOKEN}\"|" config.yml
+            awk -v token="$TOKEN_ESCAPED" '/^token:/ {$0="token: \"" token "\""} {print}' config.yml > temp && mv temp config.yml
           else
-            echo "token: \"${MSK_TOKEN}\"" | cat - config.yml > temp && mv temp config.yml
+            echo "token: \"$TOKEN_ESCAPED\"" | cat - config.yml > temp && mv temp config.yml
           fi
 
-      # Make both Stockfish and Fairy-Stockfish executable
       - name: Make engines executable
         run: |
           chmod +x engines/stockfish || true
           chmod +x engines/fairy-stockfish || true
 
-      # Run the MSKChess bot
       - name: Run MSKChess Bot
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
