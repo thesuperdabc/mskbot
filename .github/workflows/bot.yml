@@ -12,9 +12,9 @@ on:
         options:
           - normal
           - matchmaking
-          - tournament
+          # Adjust modes based on mskchess.ru capabilities
       tournament_id:
-        description: 'Tournament ID (if tournament mode)'
+        description: 'Tournament ID (if applicable)'
         type: string
         required: false
       team_id:
@@ -26,7 +26,7 @@ on:
         type: string
         required: false
   schedule:
-    - cron: '0 */6 * * *' # every 6 hours
+    - cron: '0 */6 * * *' # Run every 6 hours
   push:
     branches: [ main ]
     paths:
@@ -38,28 +38,34 @@ permissions:
 jobs:
   bot-runner:
     runs-on: ubuntu-latest
-    timeout-minutes: 355 # restart just before GitHub limit
+    timeout-minutes: 355 # Restart just before GitHub limit
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v5
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install tenacity pyyaml
+
       - name: Prepare Engine Directory
         run: |
           echo "Initializing engine storage..."
           mkdir -p engines
           sudo apt-get update && sudo apt-get install -y unzip curl
+
       - name: Fetch Latest Stockfish
         run: |
-          chmod +x engines/stockfish
+          # Adjust if mskchess.ru requires a specific engine
+          chmod +x engines/stockfish || echo "Stockfish not found, proceeding..."
+
       - name: Acquire Fairy-Stockfish
         run: |
           echo "Obtaining the latest Fairy-Stockfish..."
@@ -73,7 +79,6 @@ jobs:
             | jq -r '.artifacts[] | select(.name | contains("linux-x86-64-modern")) | .archive_download_url')
           curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o fsf.zip "$ARTIFACT_URL"
           unzip -o fsf.zip -d engines/
-          # Rename to fsf-latest
           if [ -f engines/fairy-stockfish_x86-64-modern ]; then
             mv engines/fairy-stockfish_x86-64-modern engines/fsf-latest
           else
@@ -81,23 +86,38 @@ jobs:
             exit 1
           fi
           chmod +x engines/fsf-latest
-      - name: Inject Lichess Bot Token
+
+      - name: Inject MSK Bot Token
         env:
-          LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
+          MSK_TOKEN: ${{ secrets.MSK_TOKEN }} # Renamed from LICHESS_TOKEN
         run: |
-          python3 << 'EOF'
-          import os, yaml
-          token = os.environ.get("LICHESS_TOKEN")
+          python3 - << 'EOF'
+          import os
+          import yaml
+          import sys
+
+          token = os.getenv("MSK_TOKEN")
           if not token:
-              print("ERROR: LICHESS_TOKEN secret is missing!")
-              exit(1)
-          with open("config.yml","r") as f:
-              config = yaml.safe_load(f) or {}
-          config["token"] = token
-          with open("config.yml","w") as f:
-              yaml.dump(config,f, default_flow_style=False)
-          print("✅ Token injected successfully")
+              print("ERROR: MSK_TOKEN secret is missing!")
+              sys.exit(1)
+
+          try:
+              with open("config.yml", "r") as f:
+                  config = yaml.safe_load(f) or {}
+          except Exception as e:
+              print(f"ERROR: Failed to read config.yml: {e}")
+              sys.exit(1)
+
+          config["token"] = token.strip() # Strip to handle any whitespace
+          try:
+              with open("config.yml", "w") as f:
+                  yaml.safe_dump(config, f, default_flow_style=False)
+              print("✅ Token injected successfully")
+          except Exception as e:
+              print(f"ERROR: Failed to write config.yml: {e}")
+              sys.exit(1)
           EOF
+
       - name: Launch Bot
         run: |
           CMD_BASE="python3 -u user_interface.py"
@@ -105,6 +125,7 @@ jobs:
           TOUR_ID="${{ github.event.inputs.tournament_id }}"
           TEAM_ID="${{ github.event.inputs.team_id }}"
           PASSWORD="${{ github.event.inputs.password }}"
+
           if [[ "$MODE" == "matchmaking" ]]; then
               CMD="$CMD_BASE matchmaking"
               echo "🤖 Running command: $CMD"
@@ -120,9 +141,10 @@ jobs:
                   eval "$CMD_BASE \"tournament $ARGS\""
               fi
           else
-              echo "⚠️ Mode not recognized. Running normal mode."
+              echo "🤖 Running normal mode."
               eval "$CMD_BASE"
           fi
+
       - name: Auto-Restart After Timeout
         run: |
           BOT_PID=$!
