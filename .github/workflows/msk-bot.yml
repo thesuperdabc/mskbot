@@ -47,11 +47,11 @@ jobs:
       - name: Make engines executable
         run: |
           chmod +x engines/stockfish || true
-          chmod +x engines/fairy-stockfish || true
+          chmod +x engines/fsf || true
 
       # Run the MSKChess bot
       - name: Run MSKChess Bot
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
-          python -u user_interface.py --server mskchess.ru
+          python -u user_interface.py 
