@@ -1,95 +1,51 @@
-name: MSK Bot Runner
-concurrency:
-  group: msk-bot-runner
-  cancel-in-progress: true
+name: Run bot
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Bot Mode'
-        type: choice
-        required: true
-        options:
-          - normal
-          - matchmaking
-          - tournament
-      tournament_id:
-        description: 'Tournament ID (if tournament mode)'
-        type: string
-        required: false
-      team_id:
-        description: 'Team ID (optional)'
-        type: string
-        required: false
-      password:
-        description: 'Tournament password (optional)'
-        type: string
-        required: false
-  schedule:
-    - cron: '0 */6 * * *' # Every 6 hours
   push:
-    branches: [ main ]
+    branches:
+      - "main"
     paths:
-      - '**.py'
-      - 'config.yml'
-permissions:
-  actions: write
-  contents: write
+      - "user_interface.py"
+  schedule:
+    - cron: "1 */5 * * *" # Every 5 hours
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  bot-runner:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 355
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install tenacity pyyaml
-
+      - uses: actions/checkout@v3
+      - name: Python Dependency Installation
+        uses: py-actions/py-dependency-install@v4.0.0
       - name: Prepare Engine Permissions
         run: |
-          echo "Setting permissions for engines..."
-          if [ -f engines/stockfish ]; then
-            chmod +x engines/stockfish
+          if [ -f ./engines/stockfish ]; then
+            chmod +x ./engines/stockfish
             echo "Stockfish ready"
           else
-            echo "Error: stockfish not found!"
+            echo "Error: stockfish not found"
             exit 1
           fi
-          if [ -f engines/fsf-latest ]; then
-            chmod +x engines/fsf-latest
+          if [ -f ./engines/fsf-latest ]; then
+            chmod +x ./engines/fsf-latest
             echo "Fairy-Stockfish ready"
           else
             echo "Warning: fsf-latest not found, skipping"
           fi
-          ls -l engines/
-
-      - name: Inject MSK Bot Token
-        env:
-          MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
+          ls -l ./engines/
+      - name: Inject MSK Token
         run: |
-          if [ -z "$MSK_TOKEN" ]; then
-            echo "Error: MSK_TOKEN missing!"
+          if [ -z "${{ secrets.MSK_TOKEN }}" ]; then
+            echo "Error: MSK_TOKEN missing"
             exit 1
           fi
-          TOKEN=$(echo "$MSK_TOKEN" | tr -d '\n\r')
-          cat << EOF > config.yml
-token: "$TOKEN"
-# MSK Chess OAuth2 Token
-engines:
-  path: "./engines/stockfish"
-EOF
-          echo "Config created"
-
+          sed -i "s/Token/${{ secrets.MSK_TOKEN }}/g" config.yml
+          echo "token: \"${{ secrets.MSK_TOKEN }}\"" >> config.yml
+          echo "# MSK Chess OAuth2 Token" >> config.yml
+          echo "engines:" >> config.yml
+          echo "  path: ./engines/stockfish" >> config.yml
+          echo "Config updated"
       - name: Verify config.yml
         run: |
           cat config.yml || { echo "Error: config.yml missing"; exit 1; }
@@ -98,14 +54,5 @@ EOF
             exit 1
           fi
           echo "Config verified"
-
-      - name: Launch Bot
-        run: |
-          echo "Starting bot..."
-          python3 -u user_interface.py ${{ github.event.inputs.mode || 'normal' }}
-
-      - name: Auto-Restart After Timeout
-        run: |
-          sleep 20700 && echo "Restarting bot..." && kill -SIGTERM $! &
-          wait $!
-          echo "Bot ended"
+      - name: Running the bot
+        run: python user_interface.py
