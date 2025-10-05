@@ -1,0 +1,106 @@
+name: MSK Bot Runner
+concurrency:
+  group: msk-bot-runner
+  cancel-in-progress: true
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Bot Mode'
+        type: choice
+        required: true
+        options:
+          - normal
+          - matchmaking
+          - tournament
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours
+  push:
+    branches: [ main ]
+    paths:
+      - '**.py'
+      - 'config.yml'
+permissions:
+  actions: write
+  contents: write
+jobs:
+  bot-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install tenacity pyyaml
+
+      - name: Debug MSK_TOKEN
+        env:
+          MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
+        run: |
+          if [ -z "$MSK_TOKEN" ]; then
+            echo "ERROR: MSK_TOKEN secret is missing or empty!"
+            exit 1
+          fi
+          echo "Debug: MSK_TOKEN length is ${#MSK_TOKEN}"
+          echo "Debug: MSK_TOKEN first 4 chars (sanitized): ${MSK_TOKEN:0:4}"
+
+      - name: Inject MSK Bot Token
+        env:
+          MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
+        run: |
+          if [ -z "$MSK_TOKEN" ]; then
+            echo "ERROR: MSK_TOKEN secret is missing or empty!"
+            exit 1
+          fi
+          # Sanitize token by removing newlines and carriage returns
+          SANITIZED_TOKEN=$(echo "$MSK_TOKEN" | tr -d '\n\r')
+          printf 'token: "%s"\n# MSK Chess OAuth2 Token\n' "$SANITIZED_TOKEN" > config.yml
+          echo "✅ Token injected successfully"
+
+      - name: Verify config.yml
+        run: |
+          echo "Debug: Raw contents of config.yml:"
+          cat config.yml || echo "ERROR: config.yml is empty or missing!"
+          echo "Debug: Sanitized contents of config.yml (excluding token):"
+          grep -v '^token:' config.yml || echo "No non-token fields found in config.yml"
+          if ! grep -q '^token: \".*\"$' config.yml; then
+            echo "Warning: config.yml does not match strict format 'token: \"...\"'"
+            if grep -q '^token: .*' config.yml; then
+              echo "✅ config.yml contains a token field, proceeding..."
+            else
+              echo "ERROR: config.yml does not contain a valid token field!"
+              exit 1
+            fi
+          else
+            echo "✅ config.yml format verified (strict)"
+          fi
+
+      - name: Launch Bot
+        run: |
+          CMD_BASE="python3 -u user_interface.py"
+          MODE="${{ github.event.inputs.mode }}"
+          if [[ "$MODE" == "matchmaking" ]]; then
+            echo "🤖 Running matchmaking mode."
+            eval "$CMD_BASE matchmaking"
+          elif [[ "$MODE" == "tournament" ]]; then
+            TOUR_ID="${{ github.event.inputs.tournament_id }}"
+            if [[ -z "$TOUR_ID" ]]; then
+              echo "⚠️ Tournament ID missing. Skipping."
+            else
+              echo "🤖 Joining tournament: $TOUR_ID"
+              eval "$CMD_BASE \"tournament $TOUR_ID\""
+            fi
+          else
+            echo "🤖 Running normal mode."
+            eval "$CMD_BASE"
+          fi
