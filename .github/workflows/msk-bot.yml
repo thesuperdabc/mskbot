@@ -71,7 +71,7 @@ jobs:
           else
             echo "Warning: engines/fsf-latest not found, proceeding..."
           fi
-          ls -l engines/  # Debug: List engine directory contents
+          ls -l engines/
 
       - name: Debug MSK_TOKEN
         env:
@@ -106,9 +106,9 @@ EOF
           echo "Debug: Raw contents of config.yml:"
           cat config.yml || echo "ERROR: config.yml is empty or missing!"
           echo "Debug: Sanitized contents of config.yml (excluding token):"
-          grep -v '^token:' config.yml || echo "No non-token fields found in config.yml"
+          grep -v '^token:' config.yml || echo "No non-token fields found"
           if ! grep -q '^token: \".*\"$' config.yml; then
-            echo "Warning: config.yml does not match strict token format 'token: \"...\"'"
+            echo "Warning: config.yml does not match strict token format"
             if grep -q '^token: .*' config.yml; then
               echo "✅ config.yml contains a token field, proceeding..."
             else
@@ -116,7 +116,7 @@ EOF
               exit 1
             fi
           else
-            echo "✅ config.yml token format verified (strict)"
+            echo "✅ config.yml token format verified"
           fi
           if ! grep -q '^engines:' config.yml; then
             echo "ERROR: config.yml does not contain 'engines' section!"
