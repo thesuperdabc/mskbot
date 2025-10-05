@@ -40,11 +40,13 @@ jobs:
             echo "Error: MSK_TOKEN missing"
             exit 1
           fi
-          sed -i "s/Token/${{ secrets.MSK_TOKEN }}/g" config.yml
-          echo "token: \"${{ secrets.MSK_TOKEN }}\"" >> config.yml
-          echo "# MSK Chess OAuth2 Token" >> config.yml
-          echo "engines:" >> config.yml
-          echo "  path: ./engines/stockfish" >> config.yml
+          # Create config.yml from scratch to avoid sed issues
+          cat << EOF > config.yml
+token: "${{ secrets.MSK_TOKEN }}"
+# MSK Chess OAuth2 Token
+engines:
+  path: ./engines/stockfish
+EOF
           echo "Config updated"
       - name: Verify config.yml
         run: |
