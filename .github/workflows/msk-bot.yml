@@ -1,4 +1,4 @@
-name: MSK Bot Runner
+name: MSK Bot Runner v2  # Updated name to distinguish from old runs
 concurrency:
   group: msk-bot-runner
   cancel-in-progress: true
@@ -100,4 +100,25 @@ jobs:
             fi
           else
             echo "✅ config.yml format verified (strict)"
+          fi
+
+      - name: Launch Bot
+        run: |
+          echo "🤖 Starting bot..."
+          CMD_BASE="python3 -u user_interface.py"
+          MODE="${{ github.event.inputs.mode }}"
+          if [[ "$MODE" == "matchmaking" ]]; then
+            echo "🤖 Running matchmaking mode."
+            eval "$CMD_BASE matchmaking"
+          elif [[ "$MODE" == "tournament" ]]; then
+            TOUR_ID="${{ github.event.inputs.tournament_id }}"
+            if [[ -z "$TOUR_ID" ]]; then
+              echo "⚠️ Tournament ID missing. Skipping."
+            else
+              echo "🤖 Joining tournament: $TOUR_ID"
+              eval "$CMD_BASE \"tournament $TOUR_ID\""
+            fi
+          else
+            echo "🤖 Running normal mode."
+            eval "$CMD_BASE"
           fi
