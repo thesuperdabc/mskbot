@@ -1,60 +1,47 @@
-name: Run bot
+name: Run MSKChess Bot
+
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "user_interface.py"
   schedule:
-    - cron: "1 */5 * * *" # Every 5 hours
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
+    - cron: '0 */5 * * *' # runs every 5 hours
+
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: bot-restart
+      cancel-in-progress: false
+
+    env:
+      MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Python Dependency Installation
-        uses: py-actions/py-dependency-install@v4.0.0
-      - name: Prepare Engine Permissions
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          if [ -f ./engines/stockfish ]; then
-            chmod +x ./engines/stockfish
-            echo "Stockfish ready"
-          else
-            echo "Error: stockfish not found"
-            exit 1
-          fi
-          if [ -f ./engines/fsf-latest ]; then
-            chmod +x ./engines/fsf-latest
-            echo "Fairy-Stockfish ready"
-          else
-            echo "Warning: fsf-latest not found, skipping"
-          fi
-          ls -l ./engines/
-      - name: Inject MSK Token
+          pip install -r requirements.txt
+
+      - name: Insert MSK token into config
+        env:
+          MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
         run: |
-          if [ -z "${{ secrets.MSK_TOKEN }}" ]; then
-            echo "Error: MSK_TOKEN missing"
-            exit 1
-          fi
-          # Create config.yml from scratch to avoid sed issues
-          cat << EOF > config.yml
-token: "${{ secrets.MSK_TOKEN }}"
-# MSK Chess OAuth2 Token
-engines:
-  path: ./engines/stockfish
-EOF
-          echo "Config updated"
-      - name: Verify config.yml
+          sed -i "s/^token:.*/token: \"${MSK_TOKEN}\"/" config.yml
+
+      - name: Make engines executable
         run: |
-          cat config.yml || { echo "Error: config.yml missing"; exit 1; }
-          if ! grep -q "^engines:" config.yml; then
-            echo "Error: engines section missing"
-            exit 1
-          fi
-          echo "Config verified"
-      - name: Running the bot
-        run: python user_interface.py
+          chmod +x engines/stockfish || true
+          chmod +x engines/fsf || true
+
+      - name: Run MSKChess Bot
+        env:
+          MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
+        run: |
+          python -u user_interface.py --server mskchess.ru
