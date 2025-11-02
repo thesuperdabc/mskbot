@@ -7,7 +7,7 @@ on:
 
 jobs:
   run-bot:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # ✅ use your Nimas runner
 
     concurrency:
       group: bot-restart
@@ -31,7 +31,6 @@ jobs:
           pip install -r requirements.txt
           pip install tenacity   # install missing module safely
 
-      # Safely insert MSK token
       - name: Insert MSK token into config
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
@@ -43,13 +42,11 @@ jobs:
             echo "token: \"$TOKEN_ESCAPED\"" | cat - config.yml > temp && mv temp config.yml
           fi
 
-      # Make both engines executable
       - name: Make engines executable
         run: |
           chmod +x engines/stockfish || true
           chmod +x engines/fsf || true
 
-      # Run the MSKChess bot
       - name: Run MSKChess Bot
         env:
           MSK_TOKEN: ${{ secrets.MSK_TOKEN }}
