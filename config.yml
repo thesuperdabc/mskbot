@@ -8,10 +8,11 @@ engines:
     silence_stderr: false                 # Suppresses stderr output.
     move_overhead_multiplier: 29.5         # Increase if your bot flags games too often. Default move overhead is 1 second per 1 minute initital time.
     uci_options:                          # Arbitrary UCI options passed to the engine.
-      Threads: 2                          # Maximum Threadripper power for longer games.
+      Threads: 1                          # Maximum Threadripper power for longer games.
       Hash: 256                           # Massive hash for deep calculation.
       Move Overhead: 5000                  # Increase if your bot flags games too often.
       Skill Level: 2
+      movetime: 150
     limits:    
   #    depth: 35                           # Deep search for standard games.
   #    nodes: 8000000                      # High node count for thorough analysis.
@@ -22,7 +23,7 @@ engines:
     silence_stderr: false                 # Suppresses stderr output.
     move_overhead_multiplier: 1.0         # Increase if your bot flags games too often. Default move overhead is 1 second per 1 minute initital time.
     uci_options:                          # Arbitrary UCI options passed to the engine.
-      Threads: 2                          # High thread count for variants.
+      Threads: 1                          # High thread count for variants.
       Hash: 256                           # Large hash for variant calculations.
       Move Overhead: 100                  # Increase if your bot flags games too often.
       Use NNUE: true
